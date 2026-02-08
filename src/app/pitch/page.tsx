@@ -364,7 +364,7 @@ function ENSSlide() {
             Look up any <span className="text-white">.eth</span> name to discover their published strategies
           </p>
           <div className="space-y-2">
-            {['vitalik.eth', 'aave.eth', 'uniswap.eth'].map((name) => (
+            {['vitalik.eth', 'aave.eth', 'bpan99.eth'].map((name) => (
               <div key={name} className="flex items-center gap-3 bg-black/30 rounded-lg px-4 py-2">
                 <div className="w-6 h-6 rounded-full bg-indigo-500/20" />
                 <span className="text-sm text-white">{name}</span>
@@ -494,7 +494,9 @@ function ThanksSlide() {
         </Link>
       </div>
       <p className="text-sm text-gray-600 mt-8">
-        Built with Next.js + Claude AI + Uniswap v4 + LI.FI + ENS
+        Built by <span className="text-violet-400">bpan99.eth</span>{' '}
+        <a href="https://github.com/bpthu123" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-violet-400 transition-colors">github.com/bpthu123</a>{' '}
+        | Next.js + Claude AI + Uniswap v4 + LI.FI + ENS
       </p>
     </div>
   );
