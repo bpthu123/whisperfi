@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
-import { useAccount, useSendTransaction, useSwitchChain } from 'wagmi';
-import { parseUnits } from 'viem';
+import { useState, useCallback, useRef, useMemo } from 'react';
+import { useAccount, useSendTransaction, useSwitchChain, useWalletClient, useChainId } from 'wagmi';
+import { createPublicClient, http, parseUnits } from 'viem';
+import { mainnet } from 'viem/chains';
 import { buildSwapTransaction, buildApproveTransaction } from '@/lib/uniswap/swap';
 import { getCrossChainQuote } from '@/lib/lifi/cross-chain';
 import { resolveTokenAddress, resolveTokenDecimals } from '@/lib/tokens';
 import { UNISWAP_V4_ADDRESSES } from '@/lib/uniswap/config';
+import { usePrivacySettings, FLASHBOTS_RPC } from '@/store/privacy-settings';
 import type { ExecutionPlan, ExecutionStep, StepStatus } from '@/types/execution';
 
 export interface ExecutionState {
@@ -21,6 +23,9 @@ export function useExecutionEngine() {
   const { address } = useAccount();
   const { sendTransactionAsync } = useSendTransaction();
   const { switchChainAsync } = useSwitchChain();
+  const { data: walletClient } = useWalletClient();
+  const chainId = useChainId();
+  const { flashbotsEnabled } = usePrivacySettings();
   const [state, setState] = useState<ExecutionState>({
     status: 'idle',
     currentStepIndex: -1,
@@ -29,6 +34,28 @@ export function useExecutionEngine() {
     error: null,
   });
   const abortRef = useRef(false);
+
+  // Flashbots Protect public client for submitting raw txs to private mempool
+  const flashbotsClient = useMemo(
+    () => createPublicClient({ chain: mainnet, transport: http(FLASHBOTS_RPC) }),
+    []
+  );
+
+  // Send transaction — routes through Flashbots on mainnet when enabled
+  const sendTx = useCallback(async (txParams: { to: `0x${string}`; data: `0x${string}`; value: bigint }) => {
+    if (flashbotsEnabled && chainId === 1 && walletClient) {
+      try {
+        const request = await walletClient.prepareTransactionRequest(txParams);
+        const serializedTx = await walletClient.signTransaction(request);
+        const hash = await flashbotsClient.sendRawTransaction({ serializedTransaction: serializedTx });
+        console.log('[flashbots] tx sent to private mempool:', hash);
+        return hash;
+      } catch (e) {
+        console.warn('[flashbots] wallet does not support eth_signTransaction, falling back to standard send:', e);
+      }
+    }
+    return sendTransactionAsync(txParams);
+  }, [flashbotsEnabled, chainId, walletClient, flashbotsClient, sendTransactionAsync]);
 
   const updateStep = useCallback((index: number, updates: Partial<ExecutionStep>) => {
     setState(prev => ({
@@ -72,7 +99,7 @@ export function useExecutionEngine() {
           BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'),
           step.chainId,
         );
-        const hash = await sendTransactionAsync({ to: tx.to, data: tx.data, value: tx.value });
+        const hash = await sendTx({ to: tx.to, data: tx.data, value: tx.value });
         updateStep(index, { status: 'completed', txHash: hash });
         break;
       }
@@ -87,7 +114,7 @@ export function useExecutionEngine() {
           slippage: 0.005,
           recipient: address,
         });
-        const hash = await sendTransactionAsync({ to: tx.to, data: tx.data, value: tx.value });
+        const hash = await sendTx({ to: tx.to, data: tx.data, value: tx.value });
         updateStep(index, { status: 'completed', txHash: hash });
         break;
       }
@@ -118,7 +145,7 @@ export function useExecutionEngine() {
           });
 
           if (quote.transactionRequest) {
-            const hash = await sendTransactionAsync({
+            const hash = await sendTx({
               to: quote.transactionRequest.to as `0x${string}`,
               data: quote.transactionRequest.data as `0x${string}`,
               value: BigInt(quote.transactionRequest.value),
@@ -142,7 +169,7 @@ export function useExecutionEngine() {
       default:
         updateStep(index, { status: 'completed', privacyNote: 'Unknown step type — skipped' });
     }
-  }, [address, sendTransactionAsync, switchChainAsync, updateStep]);
+  }, [address, sendTx, switchChainAsync, updateStep]);
 
   const execute = useCallback(async (plan: ExecutionPlan) => {
     if (!address) {
