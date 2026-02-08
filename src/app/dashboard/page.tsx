@@ -15,7 +15,7 @@ import { SUPPORTED_CHAINS } from '@/lib/web3/config';
 export default function DashboardPage() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const { data: ensName } = useEnsName({ address });
+  const { data: ensName } = useEnsName({ address, chainId: 1 });
   const chainInfo = SUPPORTED_CHAINS[chainId as keyof typeof SUPPORTED_CHAINS];
 
   return (

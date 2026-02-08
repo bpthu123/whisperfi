@@ -18,7 +18,7 @@ interface IntentEngineState {
 export function useIntentEngine() {
   const { address } = useAccount();
   const chainId = useChainId();
-  const { data: ensName } = useEnsName({ address });
+  const { data: ensName } = useEnsName({ address, chainId: 1 });
   const [state, setState] = useState<IntentEngineState>({
     messages: [],
     isProcessing: false,

@@ -87,8 +87,9 @@ export function useExecutionEngine() {
       case 'APPROVE': {
         const tokenAddr = resolveTokenAddress(step.fromToken, step.chainId);
         const chainAddrs = UNISWAP_V4_ADDRESSES[step.chainId as keyof typeof UNISWAP_V4_ADDRESSES];
-        if (!tokenAddr || !chainAddrs) {
-          updateStep(index, { status: 'completed', privacyNote: 'Skipped — native token or unknown chain' });
+        const isNativeETH = !tokenAddr || tokenAddr === '0x0000000000000000000000000000000000000000';
+        if (isNativeETH || !chainAddrs) {
+          updateStep(index, { status: 'completed', privacyNote: 'Skipped — native ETH needs no approval' });
           break;
         }
         // Switch chain if needed
@@ -183,7 +184,7 @@ export function useExecutionEngine() {
 
     for (let i = 0; i < steps.length; i++) {
       if (abortRef.current) {
-        setState(prev => ({ ...prev, status: 'paused', error: 'Execution cancelled by user' }));
+        setState(prev => ({ ...prev, status: 'failed', error: 'Execution cancelled by user' }));
         return;
       }
       try {
@@ -191,12 +192,13 @@ export function useExecutionEngine() {
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Step failed';
         updateStep(i, { status: 'failed', error: msg });
-        // If user rejected the tx, stop. Otherwise continue to next step.
-        if (msg.includes('User rejected') || msg.includes('cancelled')) {
-          setState(prev => ({ ...prev, status: 'failed', error: msg }));
-          return;
-        }
-        // Non-fatal: continue to next step
+        setState(prev => ({ ...prev, status: 'failed', error: msg }));
+        return;
+      }
+      // Check abort again after step completes
+      if (abortRef.current) {
+        setState(prev => ({ ...prev, status: 'failed', error: 'Execution cancelled by user' }));
+        return;
       }
     }
 
@@ -205,6 +207,7 @@ export function useExecutionEngine() {
 
   const cancel = useCallback(() => {
     abortRef.current = true;
+    setState(prev => ({ ...prev, status: 'failed', waitCountdown: null, error: 'Execution cancelled by user' }));
   }, []);
 
   const reset = useCallback(() => {

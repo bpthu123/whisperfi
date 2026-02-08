@@ -10,7 +10,7 @@ import type { StrategyConfig, StrategyLookupResult } from '@/types/strategy';
 
 export function useENSStrategy() {
   const { address } = useAccount();
-  const { data: ensName } = useEnsName({ address });
+  const { data: ensName } = useEnsName({ address, chainId: 1 });
   const { sendTransactionAsync } = useSendTransaction();
   const { switchChainAsync } = useSwitchChain();
   const [lookupResult, setLookupResult] = useState<StrategyLookupResult | null>(null);
